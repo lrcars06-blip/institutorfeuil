@@ -18,8 +18,7 @@ export async function POST(request) {
   const code = String(body.code || '').toUpperCase().replace(/\s/g, '');
   if (!CODE_RE.test(code)) return json({ error: 'Format attendu : ORF-XXXX-XXXX' }, 400);
 
-  const found = await stripe.paymentIntents.search({ query: `metadata['gift_code']:'${code}'`, limit: 1 });
-  const pi = found.data[0];
+  const pi = await findByCode(code);
   if (!pi || pi.status !== 'succeeded') return json({ error: "Carte introuvable. Si elle vient d'être achetée, réessayez dans une minute." }, 404);
 
   let g = fromMetadata(pi.metadata);
@@ -45,6 +44,23 @@ export async function POST(request) {
     return json({ ok: true, card: view(g, updated, expired) });
   }
   return json({ card: view(g, pi, expired) });
+}
+
+// 1) index de recherche Stripe (rapide, mais parfois en retard de plusieurs minutes) ; 2) parcours des paiements récents.
+async function findByCode(code) {
+  try {
+    const found = await stripe.paymentIntents.search({ query: `metadata['gift_code']:'${code}'`, limit: 1 });
+    if (found.data[0]) return found.data[0];
+  } catch (e) { console.error('search', e?.message); }
+  let starting_after;
+  for (let page = 0; page < 40; page++) {            // jusqu'à 4 000 paiements
+    const res = await stripe.paymentIntents.list({ limit: 100, starting_after });
+    const hit = res.data.find((p) => p.metadata?.gift_code === code);
+    if (hit) return hit;
+    if (!res.has_more) break;
+    starting_after = res.data[res.data.length - 1].id;
+  }
+  return null;
 }
 
 function view(g, pi, expired) {
