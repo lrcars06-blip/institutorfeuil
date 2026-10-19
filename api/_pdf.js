@@ -1,7 +1,7 @@
 // Génère la carte cadeau en PDF (A5 paysage), jointe aux e-mails. Pure JS : fonctionne sur Vercel.
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import { FONTS } from './_fonts.js';
+import { fontBytes } from './_fonts.js';
 import { SHOP, frDate } from './_lib.js';
 
 const PAL = {
@@ -11,7 +11,8 @@ const PAL = {
 };
 const c = (a) => rgb(a[0], a[1], a[2]);
 async function loadFont(doc, key) {
-  try { return await doc.embedFont(Buffer.from(FONTS[key], 'base64'), { subset: false }); } catch { return null; }
+  try { return await doc.embedFont(await fontBytes(key), { subset: false }); }
+  catch (e) { console.error('font', key, e?.message); return null; }
 }
 const wrap = (font, size, text, maxW) => {
   const words = String(text).split(/\s+/), lines = []; let cur = '';
@@ -29,7 +30,6 @@ export async function giftCardPdf(g) {
   doc.registerFontkit(fontkit);
   doc.setTitle(`Carte cadeau — ${SHOP.name}`);
   doc.setAuthor(SHOP.name);
-  const serif   = (await loadFont(doc, 'serif')) || await doc.embedFont(StandardFonts.TimesRoman);
   const serifIt = (await loadFont(doc, 'serif_italic')) || await doc.embedFont(StandardFonts.TimesRomanItalic);
   const script  = (await loadFont(doc, 'script')) || serifIt;
   const sans    = (await loadFont(doc, 'sans')) || await doc.embedFont(StandardFonts.Helvetica);
@@ -56,7 +56,7 @@ export async function giftCardPdf(g) {
     page.drawText(safe(g.duration).toUpperCase(), { x: M, y: y - 4, size: 9, font: sans, color: c(p.ink), opacity: 0.7 });
     y -= 30;
   } else {
-    page.drawText(`${g.euros} €`, { x: M, y: y - 20, size: 60, font: serif, color: c(p.ink) });
+    page.drawText(`${g.euros} €`, { x: M, y: y - 20, size: 60, font: serifIt, color: c(p.ink) });
     y -= 60;
   }
 
@@ -66,9 +66,9 @@ export async function giftCardPdf(g) {
     const lines = wrap(serifIt, 13, `« ${safe(g.message)} »`, W - 2 * M - 180).slice(0, 3);
     let my = y - 62;
     for (const l of lines) { page.drawText(l, { x: M, y: my, size: 13, font: serifIt, color: c(p.ink), opacity: 0.9 }); my -= 16; }
-    page.drawText(`— ${safe(g.fromName)}`, { x: M, y: my - 2, size: 12, font: serif, color: c(p.ink), opacity: 0.85 });
+    page.drawText(`— ${safe(g.fromName)}`, { x: M, y: my - 2, size: 12, font: serifIt, color: c(p.ink), opacity: 0.85 });
   } else {
-    page.drawText(`De la part de ${safe(g.fromName)}`, { x: M, y: y - 62, size: 12, font: serif, color: c(p.ink), opacity: 0.85 });
+    page.drawText(`De la part de ${safe(g.fromName)}`, { x: M, y: y - 62, size: 12, font: serifIt, color: c(p.ink), opacity: 0.85 });
   }
 
   // bloc code, à droite
