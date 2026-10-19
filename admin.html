@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Cartes cadeaux — Institut d'Orfeuil</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{--ivory:#F8F3ED;--cream:#EFE5DA;--plum:#2E1724;--berry:#9B2C58;--gold:#C6A46A;--muted:#7A6670;--line:rgba(46,23,36,.14);--ok:#3F8F5B;--warn:#B5651D;--bad:#B23A48}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--cream);color:var(--plum);font-family:'Manrope',system-ui,sans-serif;min-height:100vh;display:flex;justify-content:center;padding:40px 16px}
+.wrap{width:100%;max-width:480px}
+h1{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:38px;line-height:1.05;margin:6px 0 4px}
+h1 em{color:var(--berry)}
+.sub{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--berry)}
+.box{background:#fff;border-radius:16px;padding:26px;margin-top:22px;box-shadow:0 20px 50px -30px rgba(46,23,36,.3)}
+label{display:block;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+input{width:100%;font:inherit;font-size:17px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--ivory);color:var(--plum);outline:none}
+input:focus{border-color:var(--gold)}
+#code{font-family:'Courier New',monospace;font-size:22px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold}
+.f+.f{margin-top:16px}
+button{width:100%;margin-top:18px;padding:16px;border:0;border-radius:999px;font:inherit;font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;cursor:pointer;background:var(--plum);color:var(--ivory)}
+button.gold{background:var(--gold);color:var(--plum)}
+button:disabled{opacity:.5}
+.err{color:var(--bad);font-size:14px;margin-top:12px;min-height:1em}
+.badge{display:inline-block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;padding:6px 12px;border-radius:999px;color:#fff}
+.b-active{background:var(--ok)}.b-used{background:var(--muted)}.b-expired{background:var(--bad)}
+.big{font-family:'Cormorant Garamond',serif;font-size:46px;line-height:1;margin:14px 0 4px}
+.big.soin{font-size:28px;font-style:italic}
+.rows div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.rows span:first-child{color:var(--muted)}
+.rows span:last-child{text-align:right;font-weight:500}
+.rows{margin:18px 0 6px}
+.done{background:#EAF5EE;color:var(--ok);border-radius:10px;padding:12px 14px;font-size:14px;margin-top:14px}
+.lock{font-size:12px;color:var(--muted);text-align:center;margin-top:16px}
+.lock a{color:var(--berry)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="sub">Espace institut</div>
+  <h1>Cartes <em>cadeaux</em></h1>
+
+  <div class="box" id="pinBox">
+    <div class="f"><label for="pin">Code PIN</label><input type="password" id="pin" autocomplete="current-password" inputmode="text"></div>
+    <button id="pinGo">Entrer</button>
+  </div>
+
+  <div class="box" id="searchBox" hidden>
+    <div class="f"><label for="code">Code de la carte</label><input id="code" placeholder="ORF-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="13"></div>
+    <button id="check">Vérifier</button>
+    <div class="err" id="err" role="alert"></div>
+  </div>
+
+  <div class="box" id="result" hidden></div>
+  <div class="lock" id="lockLine" hidden>Session ouverte sur cet appareil · <a href="#" id="logout">Verrouiller</a></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const store={get(){try{return sessionStorage.getItem('orf_pin')||''}catch(_){return ''}},set(v){try{sessionStorage.setItem('orf_pin',v)}catch(_){}},clear(){try{sessionStorage.removeItem('orf_pin')}catch(_){}}};
+let PIN=store.get();
+const show=()=>{const on=!!PIN;$('pinBox').hidden=on;$('searchBox').hidden=!on;$('lockLine').hidden=!on;if(on)$('code').focus()};
+const fmt=n=>n.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+const frd=iso=>iso?new Date(iso+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—';
+
+async function call(payload){
+  const r=await fetch('/api/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin:PIN,...payload})});
+  const d=await r.json().catch(()=>({error:'Erreur réseau.'}));
+  if(r.status===401){PIN='';store.clear();show();}
+  return {ok:r.ok,...d};
+}
+
+$('pinGo').onclick=async()=>{PIN=$('pin').value.trim();if(!PIN)return;store.set(PIN);show()};
+$('pin').addEventListener('keydown',e=>{if(e.key==='Enter')$('pinGo').click()});
+$('logout').onclick=e=>{e.preventDefault();PIN='';store.clear();$('result').hidden=true;$('pin').value='';show()};
+
+// formatage automatique du code
+$('code').addEventListener('input',e=>{
+  let v=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(v.startsWith('ORF'))v=v.slice(3);
+  v=v.slice(0,8);e.target.value='ORF-'+v.slice(0,4)+(v.length>4?'-'+v.slice(4):'');
+});
+$('code').addEventListener('keydown',e=>{if(e.key==='Enter')$('check').click()});
+
+$('check').onclick=async()=>{
+  $('err').textContent='';$('result').hidden=true;$('check').disabled=true;
+  const d=await call({code:$('code').value,action:'check'});
+  $('check').disabled=false;
+  if(!d.ok){$('err').textContent=d.error||'Erreur.';return}
+  render(d.card);
+};
+
+function render(c,flash){
+  const st={active:['Valide','b-active'],used:['Déjà utilisée','b-used'],expired:['Expirée','b-expired']}[c.status]||['?','b-used'];
+  const val=c.kind==='soin'
+    ?`<div class="big soin">${esc(c.label)}</div><div style="color:var(--muted);font-size:13px">${esc(c.duration)} · valeur ${fmt(c.euros)}</div>`
+    :`<div class="big">${fmt(c.balance)}</div><div style="color:var(--muted);font-size:13px">restant sur ${fmt(c.euros)}</div>`;
+  let action='';
+  if(c.status==='active'){
+    action=c.kind==='soin'
+      ?`<button class="gold" id="redeem">Valider : soin réalisé</button>`
+      :`<div class="f" style="margin-top:18px"><label for="amt">Montant à débiter (€)</label><input id="amt" type="number" step="0.01" min="0.01" max="${c.balance}" inputmode="decimal" placeholder="ex. ${Math.min(c.balance,49)}"></div><button class="gold" id="redeem">Débiter</button>`;
+  }
+  $('result').innerHTML=`<span class="badge ${st[1]}">${st[0]}</span>${val}
+    <div class="rows">
+      <div><span>Code</span><span style="font-family:Courier New,monospace">${esc(c.code)}</span></div>
+      <div><span>Pour</span><span>${esc(c.toName)}</span></div>
+      <div><span>De la part de</span><span>${esc(c.fromName)}</span></div>
+      <div><span>Achetée le</span><span>${frd(c.purchased)}</span></div>
+      <div><span>Valable jusqu'au</span><span>${frd(c.expires)}</span></div>
+      ${c.lastUse?`<div><span>Dernière utilisation</span><span>${esc(c.lastUse)}</span></div>`:''}
+    </div>${flash?`<div class="done">${flash}</div>`:''}${action}<div class="err" id="err2" role="alert"></div>`;
+  $('result').hidden=false;
+  const btn=$('redeem');
+  if(btn)btn.onclick=async()=>{
+    const amount=c.kind==='amount'?parseFloat(($('amt').value||'').replace(',','.')):undefined;
+    if(c.kind==='amount'&&!(amount>0)){$('err2').textContent='Indiquez le montant à débiter.';return}
+    const confirmTxt=c.kind==='soin'?'Confirmer : marquer ce soin comme réalisé ?':`Confirmer le débit de ${fmt(amount)} ?`;
+    if(!btn.dataset.armed){btn.dataset.armed='1';btn.textContent=confirmTxt;return}
+    btn.disabled=true;
+    const d=await call({code:c.code,action:'redeem',amount});
+    if(!d.ok){$('err2').textContent=d.error||'Erreur.';btn.disabled=false;delete btn.dataset.armed;btn.textContent=c.kind==='soin'?'Valider : soin réalisé':'Débiter';if(d.card)render(d.card);return}
+    render(d.card,c.kind==='soin'?'✓ Soin validé. La carte est désormais utilisée.':`✓ ${fmt(amount)} débités. Nouveau solde : ${fmt(d.card.balance)}.`);
+  };
+}
+const esc=s=>String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+show();
+</script>
+</body>
+</html>
